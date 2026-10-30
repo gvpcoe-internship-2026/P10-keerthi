@@ -113,16 +113,23 @@ def _metrics_md(metrics: dict, stopped: bool) -> str:
     return "\n".join(lines)
 
 
-def _loss_frame(history: list[dict]) -> pd.DataFrame:
-    rows = []
-    for h in list(history):
-        if "loss" in h:
-            rows.append({"step": h["step"], "loss": h["loss"], "series": "train"})
-        if "eval_loss" in h:
-            rows.append({"step": h["step"], "loss": h["eval_loss"], "series": "validation"})
-    # Fixed dtypes: an empty object-typed frame makes the chart treat loss as text
-    return pd.DataFrame(rows, columns=["step", "loss", "series"]).astype(
-        {"step": "int64", "loss": "float64", "series": "string"})
+def _loss_frames(history: list[dict]) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Training and validation loss as two numeric frames (step, loss)."""
+    hist = list(history)
+    train = [{"step": h["step"], "loss": h["loss"]} for h in hist if "loss" in h]
+    val = [{"step": h["step"], "loss": h["eval_loss"]} for h in hist if "eval_loss" in h]
+
+    def frame(rows):
+        return pd.DataFrame(rows, columns=["step", "loss"]).astype(
+            {"step": "int64", "loss": "float64"})
+    return frame(train), frame(val)
+
+
+def _plot_updates(history: list[dict]):
+    """Only send a chart once it has data. Gradio fixes a live chart's axis types from
+    its first update, so an empty first update leaves the chart blank."""
+    train, val = _loss_frames(history)
+    return (train if len(train) else gr.update()), (val if len(val) else gr.update())
 
 
 def start_training(clean_df, model_key, custom_model, backend, load_4bit, max_len, lora_r,
@@ -167,13 +174,13 @@ def start_training(clean_df, model_key, custom_model, backend, load_4bit, max_le
             try:
                 msg = q.get(timeout=2.0)
             except queue.Empty:
-                yield "\n".join(lines[-300:]), _loss_frame(history), no_change, no_change, \
-                    no_change, no_change
+                yield "\n".join(lines[-300:]), *_plot_updates(history), no_change, \
+                    no_change, no_change, no_change
                 continue
             if msg is None:
                 break
             lines.append(msg)
-            yield "\n".join(lines[-300:]), _loss_frame(history), no_change, no_change, \
+            yield "\n".join(lines[-300:]), *_plot_updates(history), no_change, no_change, \
                 no_change, no_change
 
         if "err" in box:
@@ -183,7 +190,7 @@ def start_training(clean_df, model_key, custom_model, backend, load_4bit, max_le
                       system_prompt=cfg.system_prompt, backend=res.backend)
         lines.append(f"\nRun saved in {res.run_dir}. The model is loaded in the Test tab.")
         runs = list_runs(OUTPUT_ROOT)
-        yield ("\n".join(lines[-300:]), _loss_frame(history),
+        yield ("\n".join(lines[-300:]), *_plot_updates(history),
                _metrics_md(res.metrics, res.stopped_early),
                res.predictions if len(res.predictions) else None,
                gr.update(choices=runs, value=res.run_dir),
@@ -350,10 +357,15 @@ def build_ui() -> gr.Blocks:
             stop_msg = gr.Markdown()
             with gr.Row():
                 train_log = gr.Textbox(label="Log", lines=18, max_lines=18, autoscroll=True)
-                loss_plot = gr.LinePlot(x="step", y="loss", color="series",
-                                        label="Loss", height=360)
+                with gr.Column():
+                    train_plot = gr.LinePlot(x="step", y="loss", label="Training loss",
+                                             height=230)
+                    val_plot = gr.LinePlot(x="step", y="loss",
+                                           label="Validation loss (end of each epoch)",
+                                           height=230)
             metrics_md = gr.Markdown()
-            preds = gr.Dataframe(label="Validation answers: base vs fine-tuned", wrap=True)
+            preds = gr.Dataframe(label="Validation answers: base vs fine-tuned", wrap=True,
+                                 column_widths=["22%", "26%", "26%", "26%"])
 
         with gr.Tab("3. Test"):
             with gr.Row():
@@ -409,7 +421,7 @@ def build_ui() -> gr.Blocks:
             [clean_state, model_key, custom_model, backend, load_4bit, max_len, lora_r,
              lora_alpha, lora_dropout, lr, epochs, max_steps, batch, grad_acc, val_ratio,
              eval_samples, eval_base, system_prompt, hf_token_train],
-            [train_log, loss_plot, metrics_md, preds, test_run, deploy_run_dd])
+            [train_log, train_plot, val_plot, metrics_md, preds, test_run, deploy_run_dd])
         stop_btn.click(stop_training, None, stop_msg)
         load_btn.click(load_run, [test_run, hf_token_train], load_status)
         ask_btn.click(ask, [question, max_new, temperature], answer)
@@ -429,7 +441,8 @@ def main():
     args = p.parse_args()
     in_colab = "google.colab" in sys.modules
     build_ui().queue().launch(share=args.share or in_colab, server_name=args.host,
-                              server_port=args.port)
+                              server_port=args.port,
+                              allowed_paths=[str(ROOT / "data")])  # sample dataset button
 
 
 if __name__ == "__main__":
