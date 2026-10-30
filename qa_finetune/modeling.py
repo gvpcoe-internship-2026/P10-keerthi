@@ -57,12 +57,13 @@ def _linear_names(model) -> set[str]:
             if isinstance(m, torch.nn.Linear) and "lm_head" not in name}
 
 
-def pick_target_modules(model, unsloth: bool) -> list[str]:
+def pick_target_modules(model, unsloth: bool = False) -> list[str]:
+    """Every attention + MLP projection present in the model.
+
+    Llama has separate q/k/v and gate/up layers; Phi-4-mini keeps them fused as
+    qkv_proj and gate_up_proj, so both naming styles are included."""
     present = _linear_names(model)
-    wanted = STANDARD_LORA if unsloth else LORA_TARGET_MODULES
-    targets = [m for m in wanted if m in present]
-    if not targets:  # unusual architecture: fall back to every fused projection we know
-        targets = [m for m in LORA_TARGET_MODULES if m in present]
+    targets = [m for m in LORA_TARGET_MODULES if m in present]
     if not targets:
         raise RuntimeError(f"No LoRA target layers found. Linear layers: {sorted(present)}")
     return targets
@@ -83,11 +84,23 @@ def load_base_for_training(model_id: str, backend: str, load_in_4bit: bool,
         model, tokenizer = FastLanguageModel.from_pretrained(
             model_name=model_id, max_seq_length=max_seq_length, dtype=None,
             load_in_4bit=load_in_4bit, token=token)
-        targets = pick_target_modules(model, unsloth=True)
-        model = FastLanguageModel.get_peft_model(
-            model, r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout,
-            target_modules=targets, bias="none", use_gradient_checkpointing="unsloth",
-            random_state=seed)
+        targets = pick_target_modules(model)
+
+        def add_lora(mods):
+            return FastLanguageModel.get_peft_model(
+                model, r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout,
+                target_modules=mods, bias="none", use_gradient_checkpointing="unsloth",
+                random_state=seed)
+
+        try:
+            model = add_lora(targets)
+        except Exception as e:  # noqa: BLE001 - older Unsloth may reject fused names
+            standard = [m for m in targets if m in STANDARD_LORA]
+            if not standard or standard == targets:
+                raise
+            log.warning("Unsloth rejected %s (%s); using %s", targets, e, standard)
+            targets = standard
+            model = add_lora(targets)
     else:
         import torch
         from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
@@ -114,7 +127,7 @@ def load_base_for_training(model_id: str, backend: str, load_in_4bit: bool,
         model = AutoModelForCausalLM.from_pretrained(model_id, **kwargs)
         if use_4bit:
             model = prepare_model_for_kbit_training(model, use_gradient_checkpointing=True)
-        targets = pick_target_modules(model, unsloth=False)
+        targets = pick_target_modules(model)
         model = get_peft_model(model, LoraConfig(
             r=lora_r, lora_alpha=lora_alpha, lora_dropout=lora_dropout, bias="none",
             target_modules=targets, task_type="CAUSAL_LM"))

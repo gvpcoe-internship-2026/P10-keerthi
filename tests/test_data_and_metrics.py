@@ -76,3 +76,18 @@ def test_metrics():
     assert abs(rouge_l("w x y z", "w y z") - 6 / 7) < 1e-9
     s = score_all(["paris", "x"], ["Paris", "y"])
     assert s["exact_match"] == 0.5
+
+
+def test_lora_targets_cover_fused_phi_layers():
+    """Phi-4-mini keeps q/k/v and gate/up fused; all of them must get LoRA."""
+    from transformers import LlamaConfig, LlamaForCausalLM, Phi3Config, Phi3ForCausalLM
+
+    from qa_finetune.modeling import pick_target_modules
+
+    small = dict(vocab_size=64, hidden_size=32, intermediate_size=64, num_hidden_layers=1,
+                 num_attention_heads=4, num_key_value_heads=2)
+    phi = Phi3ForCausalLM(Phi3Config(**small, pad_token_id=0))
+    assert pick_target_modules(phi) == ["o_proj", "down_proj", "qkv_proj", "gate_up_proj"]
+    llama = LlamaForCausalLM(LlamaConfig(**small))
+    assert pick_target_modules(llama) == ["q_proj", "k_proj", "v_proj", "o_proj",
+                                          "gate_proj", "up_proj", "down_proj"]
