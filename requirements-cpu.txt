@@ -1,0 +1,13 @@
+# CPU-only setup for development and tests (no Unsloth, no 4-bit).
+# Lets you prepare data, run the test suite, test saved runs slowly, and deploy.
+torch
+transformers>=4.49
+trl>=0.12
+peft>=0.13
+datasets
+accelerate
+huggingface_hub
+mlflow
+gradio>=5.0
+pandas
+pytest

@@ -1,8 +1,36 @@
 [project]
-name = "internship-project"
-version = "0.1.0"
-requires-python = ">=3.11"
-dependencies = []
+name = "qa-finetune"
+version = "0.2.0"
+description = "Gradio app: fine-tune Phi-4-mini / Llama-3.2-3B on a CSV of QA pairs with QLoRA and deploy to a HuggingFace Space"
+requires-python = ">=3.10"
+dependencies = [
+    "torch",
+    "transformers>=4.49",
+    "trl>=0.12",
+    "peft>=0.13",
+    "datasets",
+    "accelerate",
+    "huggingface_hub",
+    "mlflow",
+    "gradio>=5.0",
+    "pandas",
+]
+
+[project.optional-dependencies]
+gpu = ["unsloth", "bitsandbytes"]
+dev = ["pytest", "ruff"]
+
+[project.scripts]
+qa-finetune = "qa_finetune.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["qa_finetune*"]
+
+[tool.setuptools.package-data]
+qa_finetune = ["space_template/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
 [tool.ruff]
 line-length = 100

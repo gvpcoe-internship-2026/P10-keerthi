@@ -1,0 +1,7 @@
+# GPU setup (Google Colab T4/L4/A100, or a Linux/WSL PC with an NVIDIA GPU).
+# Unsloth installs matching versions of torch, transformers, trl, peft, datasets,
+# accelerate, bitsandbytes and huggingface_hub, so they are not pinned here.
+unsloth
+mlflow
+gradio>=5.0
+pandas
