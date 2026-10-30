@@ -120,7 +120,9 @@ def _loss_frame(history: list[dict]) -> pd.DataFrame:
             rows.append({"step": h["step"], "loss": h["loss"], "series": "train"})
         if "eval_loss" in h:
             rows.append({"step": h["step"], "loss": h["eval_loss"], "series": "validation"})
-    return pd.DataFrame(rows, columns=["step", "loss", "series"])
+    # Fixed dtypes: an empty object-typed frame makes the chart treat loss as text
+    return pd.DataFrame(rows, columns=["step", "loss", "series"]).astype(
+        {"step": "int64", "loss": "float64", "series": "string"})
 
 
 def start_training(clean_df, model_key, custom_model, backend, load_4bit, max_len, lora_r,
