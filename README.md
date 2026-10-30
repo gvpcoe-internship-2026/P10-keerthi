@@ -37,8 +37,9 @@ CSV ──► 1. Data check ──► 2. QLoRA training ──► 3. Evaluation 
    the train/val data, predictions and the adapter.
 6. **Deployment.** The adapter (about 50–120 MB, not the full 3–4B model) is pushed to a HuggingFace model repo
    with an auto-generated model card. A Gradio Space is created that downloads the base model and the
-   adapter, merges them and serves a streaming chat. Works on the free CPU Space (slow), ZeroGPU or
-   a paid GPU.
+   adapter, merges them and serves a streaming chat. It is created on **ZeroGPU**, which free
+   HuggingFace accounts can use for up to 2 Gradio Spaces. (Since 2026, Gradio Spaces on CPU need a
+   paid PRO/Team plan.)
 
 ## Tech Stack
 Unsloth, PEFT, TRL, MLflow, HuggingFace Hub, Gradio, Transformers, PyTorch
@@ -109,8 +110,9 @@ At least 5 rows are required; 50+ is recommended.
 | Where | Training | Chat speed |
 |---|---|---|
 | Colab T4 (16 GB) | Phi-4-mini / Llama-3.2-3B 4-bit: a few minutes for ~50 rows × 3 epochs | fast |
-| HF Space, free CPU | — | slow (bf16 on 2 vCPU; about 1 token/s) |
-| HF Space, ZeroGPU / T4 | — | fast |
+| HF Space, ZeroGPU (free accounts: up to 2 Spaces) | — | fast |
+| HF Space, CPU basic (needs HF PRO) | — | slow (about 1 token/s) |
+| HF Space, T4 small (paid per hour) | — | fast |
 
 ## Notes from the Week-1 demo notebook
 * The demo trained with a `### Instruction / ### Response` text format but tested with the chat

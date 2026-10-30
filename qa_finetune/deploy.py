@@ -11,10 +11,12 @@ from pathlib import Path
 from typing import Callable
 
 SPACE_TEMPLATE_DIR = Path(__file__).parent / "space_template"
+# Since mid-2026 HuggingFace requires a paid plan (PRO / Team) for Gradio Spaces on CPU,
+# but free personal accounts may still run up to 2 Gradio Spaces on ZeroGPU.
 HARDWARE_CHOICES = {
-    "CPU basic (free, slow)": None,
-    "ZeroGPU (needs HF PRO)": "zero-a10g",
-    "T4 small (paid)": "t4-small",
+    "ZeroGPU (free accounts: max 2 Spaces)": "zero-a10g",
+    "CPU basic (needs HF PRO, slow)": "cpu-basic",
+    "T4 small (paid per hour)": "t4-small",
 }
 
 
@@ -173,16 +175,16 @@ def create_space(run_dir: str, space_id: str, adapter_repo: str, token: str | No
     if val.exists():
         import pandas as pd
         summary["examples"] = list(pd.read_csv(val)["question"].head(4))
+    # Hardware must be chosen when the Space is created: creating a Gradio Space on the
+    # default CPU hardware fails with "402 Payment Required" on free accounts.
     api.create_repo(space_id, repo_type="space", space_sdk="gradio", private=private,
-                    exist_ok=True)
+                    exist_ok=True, space_hardware=hardware or "zero-a10g")
     if add_token_secret:
         api.add_space_secret(space_id, "HF_TOKEN", tok)
     with tempfile.TemporaryDirectory() as tmp:
         render_space(summary, adapter_repo, title or space_id.split("/")[-1], Path(tmp))
         api.upload_folder(folder_path=tmp, repo_id=space_id, repo_type="space",
                           commit_message="Deploy QA chatbot")
-    if hardware:
-        api.request_space_hardware(space_id, hardware)
     return f"https://huggingface.co/spaces/{space_id}"
 
 

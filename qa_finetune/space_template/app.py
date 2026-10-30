@@ -1,8 +1,8 @@
 """HuggingFace Space: chat with a base model + QLoRA adapter fine-tuned on QA pairs.
 
 Settings come from space_config.json (written by qa_finetune.deploy). Works on:
-  * free CPU Spaces (bfloat16 weights, slow but free),
-  * ZeroGPU Spaces (needs HF PRO) and paid GPU Spaces (fast).
+  * ZeroGPU Spaces (free accounts may run up to 2; fast),
+  * CPU Spaces (need a paid HF plan since 2026; slow) and paid GPU Spaces.
 If the adapter repo is private, add your token as a Space secret named HF_TOKEN.
 """
 
@@ -25,8 +25,13 @@ with open("space_config.json", encoding="utf-8") as f:
     CFG = json.load(f)
 
 TOKEN = os.getenv("HF_TOKEN")
-DEVICE = "cuda" if (ZERO_GPU or torch.cuda.is_available()) else "cpu"
-DTYPE = torch.bfloat16 if DEVICE == "cpu" or torch.cuda.is_bf16_supported() else torch.float16
+if ZERO_GPU:  # ZeroGPU: load on "cuda" at start-up, the GPU is attached per request
+    DEVICE, DTYPE = "cuda", torch.bfloat16
+elif torch.cuda.is_available():
+    DEVICE = "cuda"
+    DTYPE = torch.bfloat16 if torch.cuda.get_device_capability(0)[0] >= 8 else torch.float16
+else:
+    DEVICE, DTYPE = "cpu", torch.bfloat16
 
 print(f"Loading {CFG['base_model']} + {CFG['adapter_repo']} on {DEVICE} ({DTYPE}) ...")
 tokenizer = AutoTokenizer.from_pretrained(CFG["adapter_repo"], token=TOKEN)
