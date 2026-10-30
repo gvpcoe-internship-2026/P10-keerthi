@@ -245,18 +245,41 @@ def deploy(run_dir, token, model_repo, space_name, private, add_secret, hardware
     if not (model_repo or "").strip():
         raise gr.Error("Enter a name for the model repository.")
     msgs: list[str] = []
-    try:
-        urls = deploy_run(run_dir, (token or "").strip() or None, model_repo,
-                          (space_name or "").strip() or None, bool(private), bool(add_secret),
-                          HARDWARE_CHOICES.get(hardware_label), log_fn=msgs.append)
-    except Exception as e:  # noqa: BLE001
-        raise gr.Error(f"Deploy failed: {e}")
+    box: dict = {}
+
+    def note(m: str):
+        msgs.append(m)
+        print(f"[deploy] {m}", flush=True)  # also visible in the Colab cell output
+
+    def worker():
+        try:
+            box["urls"] = deploy_run(
+                run_dir, (token or "").strip() or None, model_repo,
+                (space_name or "").strip() or None, bool(private), bool(add_secret),
+                HARDWARE_CHOICES.get(hardware_label), log_fn=note)
+        except Exception as e:  # noqa: BLE001
+            box["err"] = e
+
+    # Upload in a thread and send progress every few seconds. A single long silent
+    # request can be dropped by the public gradio.live link (Colab).
+    t = threading.Thread(target=worker, daemon=True)
+    t.start()
+    secs = 0
+    while t.is_alive():
+        t.join(timeout=3)
+        secs += 3
+        yield "\n".join(f"- {m}" for m in msgs) + f"\n\n⏳ Working... {secs}s"
+    if "err" in box:
+        print(f"[deploy] failed: {box['err']!r}", flush=True)
+        raise gr.Error(f"Deploy failed: {box['err']}")
+    urls = box["urls"]
     out = ["\n".join(f"- {m}" for m in msgs), "",
            f"**Model (LoRA adapter):** {urls['model_url']}"]
     if "space_url" in urls:
         out.append(f"**Space:** {urls['space_url']}  \nThe Space takes a few minutes to "
                    "build the first time. Copy this link into the Demo section of README.md.")
-    return "\n".join(out)
+    print("[deploy] done: " + ", ".join(urls.values()), flush=True)
+    yield "\n".join(out)
 
 
 # ------------------------------------------------------------------------------------
