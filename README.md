@@ -130,4 +130,13 @@ At least 5 rows are required; 50+ is recommended.
 - [ ] Week 8: Final deliverable
 
 ## Demo
-[Link here once deployed]
+- **Live chat (HuggingFace Space, ZeroGPU):** https://huggingface.co/spaces/kanthikiran/nimbus-library-chat
+- **LoRA adapter (model repo):** https://huggingface.co/kanthikiran/nimbus-library-phi4-qlora
+
+Trained on `data/sample_qa.csv` (52 fictional library help-desk pairs) with Phi-4-mini, QLoRA r=16 on
+all attention + MLP layers, 5 epochs, 2.6 min on a Colab T4 (3.8 GB GPU memory).
+
+| metric (5 held-out questions) | base model | fine-tuned |
+|---|---|---|
+| token F1 | 0.177 | 0.440 |
+| ROUGE-L | 0.147 | 0.376 |
