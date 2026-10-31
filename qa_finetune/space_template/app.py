@@ -37,7 +37,9 @@ print(f"Loading {CFG['base_model']} + {CFG['adapter_repo']} on {DEVICE} ({DTYPE}
 tokenizer = AutoTokenizer.from_pretrained(CFG["adapter_repo"], token=TOKEN)
 base = AutoModelForCausalLM.from_pretrained(CFG["base_model"], torch_dtype=DTYPE,
                                             token=TOKEN, low_cpu_mem_usage=True)
-model = PeftModel.from_pretrained(base, CFG["adapter_repo"], token=TOKEN)
+# Load the adapter on CPU: on ZeroGPU no GPU is attached at start-up, so loading the
+# weights straight to "cuda" fails. The merged model is moved to DEVICE below.
+model = PeftModel.from_pretrained(base, CFG["adapter_repo"], token=TOKEN, torch_device="cpu")
 model = model.merge_and_unload()  # fold LoRA into the weights: faster generation
 model.to(DEVICE).eval()
 print("Model ready.")
